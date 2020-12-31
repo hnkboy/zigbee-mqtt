@@ -1,1 +1,2 @@
 /zigbee_mqtt.log
+infra/__pycache__/*.pyc
