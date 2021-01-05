@@ -102,7 +102,7 @@ int main(int argn, char **argc)
 		perror ("Epoll_ctl TCP error!\n");
 		exit (1);
 	}
-    send (client_sock, "Hi! I'm TCP client!\n", 21, 0);
+    //send (client_sock, "Hi! I'm TCP client!\n", 21, 0);
     printf ("Connecting success...\n");
 /*
  * Client service loop
@@ -166,6 +166,7 @@ int main(int argn, char **argc)
                     if (ret == 0)
                         printf("服务器主动关闭连接！！！\n");
                     close(events[i].data.fd);
+                    exit(1);
                 }
             }
             else if (events[i].events & EPOLLIN)
@@ -199,6 +200,7 @@ int main(int argn, char **argc)
 	}
 	closesocket (tcp_sock);
 	closesocket (udp_sock);
+    closesocket (client_sock);
 	close (epfd);
 	return 1;
 }

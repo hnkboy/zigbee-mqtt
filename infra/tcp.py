@@ -1,11 +1,13 @@
 import socket
 import threading
 from infra.logger import logger
-
+import json
 from ctypes import *
 #Variables for holding information about connections
 connections = []
 total_connections = 0
+
+
 
 #Client class, new instance created for each connected client
 #Each instance has the socket and address that is associated with items
@@ -43,6 +45,17 @@ class Client(threading.Thread):
                 for client in connections:
                     if client.id != self.id:
                         client.socket.sendall(data)
+                try:
+                    jsonstr = str(data.decode("utf-8"))
+                    print(jsonstr)
+                    data2 = json.loads(jsonstr)
+                    print(data2['dev'])
+                except:
+                    print("Client " + " has disconnected")
+                    #break
+
+
+
 #Wait for new connections
 def newconnections(socket):
     while True:
