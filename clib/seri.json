@@ -1,0 +1,18 @@
+{
+    "devid": 0,
+    "devtype": "CALL",
+    "devrange": 1,
+    "tlv":[
+        {
+        "tag": 1,
+        "len": 2,
+        "value": 2
+        },
+        {
+            "tag": 1,
+            "len": 2,
+            "value": 2
+        }
+    ]
+
+}
