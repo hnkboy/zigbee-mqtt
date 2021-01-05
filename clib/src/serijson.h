@@ -1,6 +1,8 @@
 #ifndef __CLIB_ZIGBEESERIAL_
 #define __CLIB_ZIGBEESERIAL_
 
+
+
 /*CMD =   cmd+devid*/
 /*cmd*/
 #define CMD_COOR       0x00              //发往协调器
@@ -42,8 +44,7 @@ typedef enum tg_endevmod
 
 #define ZIGBEE_MAX_DATALEN 50         /*与zigbee 通信 数据缓冲区大小*/
 
-typedef unsigned char uchar;
-typedef unsigned short ushort;
+
 typedef enum tgtlvtype
 {
     TLV_DO_LIGHT = 1,         /*开灯操作*/
@@ -103,6 +104,7 @@ typedef struct stserialmsghead
     ushort crc;
     uchar data[0];
 }SERIAL_RCVMSG_S;
+
 typedef struct stserialmsgtlv
 {
     uchar type;
@@ -127,7 +129,7 @@ typedef struct sttyperesptemphumi
     uchar humi;
 }SERIAL_TLV_MO_GET_TEMPHUMI;
 
-
+int seri_to_json(char* in, int in_len, char* out);
 
 
 #endif

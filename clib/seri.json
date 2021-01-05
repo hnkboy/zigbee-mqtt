@@ -1,18 +1,23 @@
 {
-    "devid": 0,
-    "devtype": "CALL",
-    "devrange": 1,
-    "tlv":[
+    "dev":[
         {
-        "tag": 1,
-        "len": 2,
-        "value": 2
-        },
-        {
-            "tag": 1,
-            "len": 2,
-            "value": 2
+            "devid": 3439,
+            "devrssi": 22,
+            "devtype": "switch",
+            "devtlv":[
+                {
+                "tag": 1,
+                "len": 2,
+                "value": "0x3d3f"
+                },
+                {
+                    "tag": 1,
+                    "len": 2,
+                    "value": 2
+                }
+            ]
         }
     ]
+
 
 }

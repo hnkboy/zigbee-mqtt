@@ -1,6 +1,8 @@
 import socket
 import threading
 from infra.logger import logger
+
+from ctypes import *
 #Variables for holding information about connections
 connections = []
 total_connections = 0
@@ -28,19 +30,19 @@ class Client(threading.Thread):
     def run(self):
         while self.signal:
             try:
-                data = self.socket.recv(32)
+                data = self.socket.recv(8096)
             except:
                 print("Client " + str(self.address) + " has disconnected")
                 self.signal = False
                 connections.remove(self)
                 break
+            #logger.info("ID " + str(self.id) + ": " + str(data))
             if str(data.decode("utf-8")) != "":
                 #print("ID " + str(self.id) + ": " + str(data.decode("utf-8")))
                 logger.info("ID " + str(self.id) + ": " + str(data.decode("utf-8")))
                 for client in connections:
                     if client.id != self.id:
                         client.socket.sendall(data)
-
 #Wait for new connections
 def newconnections(socket):
     while True:

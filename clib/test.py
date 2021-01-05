@@ -33,3 +33,4 @@ try:
     adddll.seri_to_json(val, len(json_str) ,addres)
 except Exception as e:
     print(str(e))
+
