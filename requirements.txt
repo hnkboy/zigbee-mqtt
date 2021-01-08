@@ -1,1 +1,2 @@
 hbmqtt==hbmqtt-0.9.6
+netifaces==netifaces-0.10.8
