@@ -6,6 +6,7 @@
 #include "infra.h"
 #include "serijson.h"
 
+
 char *seri_dev_modestr[DEV_MODE_MAX]=
 {
 	[DEV_MODE_COOR]    =   "coor",

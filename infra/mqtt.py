@@ -6,7 +6,7 @@ from infra.logger import logger
 
 def mqtt_core(mqtt_host):
     #logger.error("mqtt test %s", mqtt_host)
-    print("tetest\n")
+    print("test\n")
     C = MQTTClient()
     C.connect(mqtt_host)
     # Subscribe to '$SYS/broker/uptime' with QOS=1

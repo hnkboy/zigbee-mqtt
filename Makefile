@@ -1,5 +1,5 @@
 LD = $(CROSS_COMPILE)gcc
 CC = $(CROSS_COMPILE)gcc
-.PHONY: clib
+.PHONY: serid
 clib:
-	make -C clib
+	make -C serid

@@ -21,6 +21,7 @@ int main(int argn, char **argc)
 	int tcp_sock, udp_sock, from_len, ready_tcp, ready_udp, ready, contact, len, epfd, fd, i;
     int client_sock;
 	int timeout_msec = 500;
+    int client_con_ret;
 	char buf[30];
 	struct sockaddr_in s_addr, clnt_addr, new_s_addr;
 	struct epoll_event ev, events[NUM_EVENTS];
@@ -92,8 +93,12 @@ int main(int argn, char **argc)
  * client TCP-socket part.
  */
 	printf ("Connecting to server...\n");
-	connect (client_sock, (struct sockaddr *)&clnt_addr, sizeof(clnt_addr));
-
+	client_con_ret = connect (client_sock, (struct sockaddr *)&clnt_addr, sizeof(clnt_addr));
+    if(client_con_ret == (-1))
+    {
+        perror ("Connect mqtt error!\n");
+        exit (1);
+    }
 	ev.events = EPOLLIN | EPOLLET;
 	ev.data.fd = client_sock;
 	ready_tcp = epoll_ctl (epfd, EPOLL_CTL_ADD, client_sock, &ev);

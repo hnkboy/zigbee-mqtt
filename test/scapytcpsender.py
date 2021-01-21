@@ -1,5 +1,6 @@
 from scapy.all import *
-from scapy.layers.inet import IP, TCP, UDP
+from scapy.layers.inet import IP, TCP, UDP, Ether
+import random
 
 iface = "VMware Virtual Ethernet Adapter for VMnet10"
 # VARIABLES
@@ -17,15 +18,22 @@ def send_packet(protocol=None, src_ip=None, src_port=None, flags=None, dst_ip=No
     elif protocol == 'udp':
         if flags: raise Exception(" Flags are not supported for udp")
         packet = IP(src=src_ip, dst=dst_ip) / UDP(sport=src_port, dport=dst_port) / message
+    elif protocol == 'eth':
+        packet = Ether(dst='52:54:00:3b:81:1a') / IP(src=src_ip,dst=dst_ip,ttl=(3,3)) / message
     else:
         raise Exception("Unknown protocol %s" % protocol)
 
-    send(packet, iface=iface)
-
+    #send(packet, iface=iface)
+    sendp(packet, iface=iface)
 
 def main():
+    num=1
     while True:
-        send_packet("tcp", src, sport, 'S', dst, dport, iface,
+
+        dst_var = str(random.randint(0,255)) + "." + str(random.randint(0,255)) + "." + str(random.randint(0,255)) + "." + str(random.randint(0,255))
+        print(dst_var)
+
+        send_packet("eth", src, sport, 'S', dst_var, dport, iface,
                     "Send by Turkay Biliyor : " + datetime.now().strftime("%m/%y %H:%M:%S"))
         time.sleep(1)
 
