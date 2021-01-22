@@ -1,8 +1,8 @@
+
 {
     "dev":[
         {
-            "devid": 3439,
-            "devrssi": 22,
+            "zigbeeid": 3439,
             "devtype": "switch",
             "devtlv":[
                 {
@@ -13,11 +13,10 @@
                 {
                     "tag": 1,
                     "len": 2,
-                    "value": 2
+                    "value": "0x3d3f"
                 }
             ]
         }
     ]
-
 
 }

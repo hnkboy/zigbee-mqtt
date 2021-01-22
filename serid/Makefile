@@ -6,12 +6,13 @@ TARGET = serid
 SRCS = $(wildcard ./src/*.c)
 export SRCS
 LIBS=-L ./ -lcjson
-
+#编译出lib
+#$(CC) $(SRCS) $(LIBS) -fPIC -shared -o $(TARGETLIB)
 all: $(TARGET)
 $(TARGET): $(SRCS)
-	#$(CC) $(SRCS) $(LIBS) -fPIC -shared -o $(TARGETLIB)
+
 	$(CC) $(SRCS) $(LIBS)  -o $(TARGET)
-	@echo test
+	@echo build done
 
 clean:
 	-rm $(OBJS) $(TARGET)

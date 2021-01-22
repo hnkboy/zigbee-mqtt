@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
- #include <arpa/inet.h>
+#include <unistd.h>
+#include <syslog.h>
+#include <arpa/inet.h>
 #include <cjson/cJSON.h>
 #include "infra.h"
 #include "serijson.h"
@@ -9,35 +11,35 @@
 
 char *seri_dev_modestr[DEV_MODE_MAX]=
 {
+   	[DEV_MODE_ERROR]    =  "na",
 	[DEV_MODE_COOR]    =   "coor",
-    [DEV_MODE_SENSOR]  = "sensor",
-    [DEV_MODE_SWITCH]  = "switch",
-    [DEV_MODE_OTHER]   =  "other",
+    [DEV_MODE_SENSOR]  =   "sensor",
+    [DEV_MODE_SWITCH]  =   "switch",
+    [DEV_MODE_OTHER]   =   "other",
 };
 
 
 char *seri_tlv_tagstr[TLV_MAX]={
-	[0]            ="ERROR",
-	[TLV_DO_LIGHT] = "DO_LIGHT",
-    [TLV_GET_KEY] = "GET_KEY",
-    [TLV_GET_TEMPER] = "GET_TEMPER",
-    [TLV_MO_GET_TEMPHUMI] = "GET_HUMI",
+	[0]                     = "ERROR",
+	[TLV_DO_LIGHT]          = "DO_LIGHT",
+    [TLV_GET_KEY]           = "GET_KEY",
+    [TLV_GET_TEMPER]        = "GET_TEMPER",
+    [TLV_MO_GET_TEMPHUMI]   = "GET_HUMI",
+    [TLV_RESP_DO_LIGHT]     = "MO_LIGHT",
+    [TLV_RESP_GET_KEY]      = "MO_KEY",
+    [TLV_RESP_GET_TEMPER]   = "MO_TEMPER",
+    [TLV_RESP_GET_HUMI]     = "MO_HUMI",
+    [TLV_SET_ADDR]          = "SET_ADDR",
+    [TLV_MO_DISTANCE]       = "MO_DISTANCE",
+    [TLV_REQ_DISCOVE]       = "REQ_DISTANCE",
+    [TLV_RESP_DISCOVE]      = "RESP_DISTANCE",
 
-    [TLV_RESP_DO_LIGHT] ="MO_LIGHT",
-    [TLV_RESP_GET_KEY] = "MO_KEY",
-    [TLV_RESP_GET_TEMPER] = "MO_TEMPER",
-    [TLV_RESP_GET_HUMI] = "MO_HUMI",
-    [TLV_SET_ADDR] = "SET_ADDR",
-    [TLV_MO_DISTANCE] = "MO_DISTANCE",
-    [TLV_REQ_DISCOVE] = "REQ_DISTANCE",
-    [TLV_RESP_DISCOVE] = "RESP_DISTANCE",
-
-    [TLV_REQ_SWITCH_STATE] = "REQ_SWITCH_STATE",
-    [TLV_RESP_SWITCH_STATE] ="RESP_SWITCH_STATE",
-    [TLV_REQ_DO_SWITCH] ="REQ_DO_SWITCH",
-    [TLV_RESP_DO_SWITCH] = "RESP_DO_SWITCH",
-    [TLV_MO_GET_TEMPHUMI] ="MO_GET_TEMPHUMI",
-    [TLV_MO_DEVNAME] ="MO_DEVNAME",
+    [TLV_REQ_SWITCH_STATE]  = "REQ_SWITCH_STATE",
+    [TLV_RESP_SWITCH_STATE] = "RESP_SWITCH_STATE",
+    [TLV_REQ_DO_SWITCH]     = "REQ_DO_SWITCH",
+    [TLV_RESP_DO_SWITCH]    = "RESP_DO_SWITCH",
+    [TLV_MO_GET_TEMPHUMI]   = "MO_GET_TEMPHUMI",
+    [TLV_MO_DEVNAME]        = "MO_DEVNAME",
 };
 
 void seri_msgntoh(SERIAL_RCVMSG_S *pstmsg)
@@ -101,21 +103,25 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
     }
     else if(LOCAL_COOR == pstmsg->addr2 )
     {
-        /* 协调器的消息暂不处理*/
+        /* 协调器的消息暂不处理 */
         return NULL;
     }
 
 
-    ustmp  =  pstmsg->addr2 >> 8;   /*转换字节序*/
+    ustmp  =  pstmsg->addr2 >> 8;   /* 转换字节序 */
     ustmp |= (pstmsg->addr2 << 8) & 0xff00;
     pstmsg->addr2 = ustmp;
 
     //strbuf
     root =  cJSON_CreateObject();
 
-    cJSON_AddItemToObject(root, "devid", cJSON_CreateNumber(pstmsg->addr2));
-    cJSON_AddItemToObject(root, "devrssi", cJSON_CreateNumber(pstmsg->rssi));
-
+    /* json 填充设备基础信息 */
+    sprintf(print_strbuf,"%05d", pstmsg->addr2);
+    cJSON_AddItemToObject(root, "devid",    cJSON_CreateString(print_strbuf));
+    sprintf(print_strbuf,"%05d", pstmsg->addr3);
+    cJSON_AddItemToObject(root, "coorid",    cJSON_CreateString(print_strbuf));
+    cJSON_AddItemToObject(root, "devrssi",  cJSON_CreateNumber(pstmsg->rssi));
+    cJSON_AddItemToObject(root, "devrtype", cJSON_CreateString(seri_dev_modestr[pstmsg->devtype]));
 
 
     array = cJSON_CreateArray();
@@ -153,8 +159,7 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
                 /*检查合法性*/
                 if ((100 <= psttemper->temper) || (100 <= psttemper->humi))
                 {
-                    printf(" temper or humi is  invalid \n");
-                    //zigbee_debug(ZIGBEE_DEBUG_ERROR, " temper or humi is  invalid \n");
+                    syslog(LOG_WARNING, "temper or humi is  invalid %d %d\n",psttemper->temper, psttemper->humi);
                     break;
                 }
                 cJSON_AddItemToObject(root, "temper", cJSON_CreateNumber(psttemper->temper));
@@ -167,27 +172,37 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
                 break;
             }
         }
+        /* 整理TLV的信息，以json形式写入 */
         sprintf(print_strbuf,"%s", seri_tlv_tagstr[pstmsgtlvhead->type]);
         cJSON_AddItemToObject(item, "tag", cJSON_CreateString(print_strbuf));
         cJSON_AddItemToObject(item, "len", cJSON_CreateNumber(pstmsgtlvhead->len));
+        print_strbuf[0] = '\0';
+        strcat(print_strbuf, "0x");
         for (int i = 0; i < pstmsgtlvhead->len; i++)
         {
-            sprintf(print_strbuf + 2*i,"%02x", strbuf[i]);
+            sprintf(print_strbuf + 2 + 2*i,"%02x", strbuf[i]);
         }
-        print_strbuf[pstmsgtlvhead->len*2] = '\0';
-        strcat(print_strbuf, " HEX");
+        print_strbuf[pstmsgtlvhead->len*2 +2] = '\0';
+
 
         cJSON_AddItemToObject(item, "value", cJSON_CreateString(print_strbuf));
-
         cJSON_AddItemToArray(array, item);
-        cJSON_AddItemToObject(root, "devtlv", array);
     }
 
-    //zigbee_devnode_printall();
-    //zigbee_serialsenddiscover();
+    cJSON_AddItemToObject(root, "devtlv", array);
     return root;
 }
+/*
+* @brief
+*/
+int json_msgproc(IN uchar *jsonbuf, IN int msglen,
+                    INOUT uchar *seribuf, INOUT int *sendlen)
+{
+    int ret = ERROR_SUCCESS;
 
+
+    return ret;
+}
 //int main(int argn, char **argc)
 int seri_to_json(char* in, int in_len, char* out)
 {

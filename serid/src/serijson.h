@@ -17,11 +17,12 @@
 
 typedef enum tg_endevmod
 {
-	 DEV_MODE_COOR = 1,
-	 DEV_MODE_SENSOR,
-	 DEV_MODE_SWITCH,
-	 DEV_MODE_OTHER,
-	 DEV_MODE_MAX,
+     DEV_MODE_ERROR   = 0x00,
+	 DEV_MODE_COOR    = 0x01,
+	 DEV_MODE_SENSOR  = 0x02,
+	 DEV_MODE_SWITCH  = 0x03,
+	 DEV_MODE_OTHER   = 0x04,
+	 DEV_MODE_MAX     = 0x05,
 }ZIGBEE_DEV_MODE_E;
 
 
@@ -52,15 +53,15 @@ typedef enum tgtlvtype
     TLV_GET_TEMPER,
     TLV_GET_HUMI,
 
-    TLV_RESP_DO_LIGHT = 0x05,
-    TLV_RESP_GET_KEY,
-    TLV_RESP_GET_TEMPER,
-    TLV_RESP_GET_HUMI,
+    TLV_RESP_DO_LIGHT     = 0x05,
+    TLV_RESP_GET_KEY      = 0x06,
+    TLV_RESP_GET_TEMPER   = 0x07,
+    TLV_RESP_GET_HUMI     = 0x08,
 
-    TLV_SET_ADDR     = 0x09,
-    TLV_MO_DISTANCE  = 0x0a,
-    TLV_REQ_DISCOVE  = 0x0b,
-    TLV_RESP_DISCOVE = 0x0c,   /*回复设备地址发现*/
+    TLV_SET_ADDR          = 0x09,
+    TLV_MO_DISTANCE       = 0x0a,
+    TLV_REQ_DISCOVE       = 0x0b,
+    TLV_RESP_DISCOVE      = 0x0c,   /*回复设备地址发现*/
 
     TLV_REQ_SWITCH_STATE  = 0x0f,
     TLV_RESP_SWITCH_STATE = 0x10,
@@ -100,7 +101,8 @@ typedef struct stserialmsghead
     ushort addr2;
     ushort addr3;
     uchar  rssi;
-    uchar  pad[3];
+    uchar  devtype;
+    uchar  pad[2];
     ushort crc;
     uchar data[0];
 }SERIAL_RCVMSG_S;
@@ -130,7 +132,8 @@ typedef struct sttyperesptemphumi
 }SERIAL_TLV_MO_GET_TEMPHUMI;
 
 int seri_to_json(char* in, int in_len, char* out);
-
+int json_msgproc(IN uchar *jsonbuf, IN int msglen,
+                    INOUT uchar *seribuf, INOUT int *sendlen);
 
 #endif
 
