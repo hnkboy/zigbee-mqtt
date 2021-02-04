@@ -39,6 +39,8 @@ API void coor_add(int coorid,
         if(NULL != node)
         {
             node->fd = fd;
+            node->coorid = coorid;
+            sl_addhead(&coorhead, &node->stnode);
         }
     }
 }
@@ -73,12 +75,13 @@ API void coor_del(int coorid)
 		node = SL_ENTRY(pstnode,coor_node_t,stnode);
 		if(coorid == node->coorid)
         {
+            sl_del(&coorhead, pstnode);
 			free(node);
 			break;
 		}
 	}
 }
-API void coor_delall(void)
+void coor_delall(void)
 {
 
 	coor_node_t *node = NULL;
@@ -86,9 +89,36 @@ API void coor_delall(void)
 	SL_NODE_S *pstnext = NULL;
 	SL_FOREACH_SAFE(&coorhead,pstnode,pstnext){
 		node = SL_ENTRY(pstnode, coor_node_t, stnode);
+        sl_freeall(&coorhead, free);
 		free(node);
 	}
 }
+/**
+*  @功能描述: fd节点初始化
+*/
+API void coorfd_fini()
+{
+	coor_delall();
+}
+
+API int  coor_findfd(int coorid)
+{
+
+	coor_node_t *node = NULL;
+	SL_NODE_S *pstnode = NULL;
+	SL_NODE_S *pstnext = NULL;
+	SL_FOREACH_SAFE(&coorhead,pstnode,pstnext){
+
+		node = SL_ENTRY(pstnode,coor_node_t,stnode);
+
+		if(coorid == node->coorid)
+		{
+			return node->fd;
+		}
+	}
+	return -1;
+}
+
 
 API void coor_printall(char *pstr)
 {

@@ -14,7 +14,8 @@
 
 #include "infra.h"
 #include "serijson.h"
-
+#include "list.h"
+#include "coor.h"
 /* 最大缓存区大小 */
 #define MAX_BUFFER_SIZE 8096
 
@@ -35,9 +36,11 @@ int main(int argn, char **argc)
 	struct epoll_event ev, events[NUM_EVENTS];
     ushort server_port, client_port;
 
-    /*打开syslog*/
+    /*1. 打开syslog*/
     openlog("SERID", LOG_CONS | LOG_PID, LOG_LOCAL2);
-
+    
+    /*2. 初始化 coor 设备资源*/
+    coorfd_init();
     if (argn <= 2)
     {
         printf("arg: recvport sendport");
@@ -176,6 +179,7 @@ int main(int argn, char **argc)
 				sendto(udp_sock, "It's for UDP client!\n", 22,
 				0, (struct sockaddr *)&s_addr, sizeof(s_addr));
 			}
+            /*作为客户端连接mqtt*/
             else if (events[i].data.fd == client_sock)
             {
                 char buffer[MAX_BUFFER_SIZE];
@@ -183,18 +187,27 @@ int main(int argn, char **argc)
                 int serilen;
                 ushort coorid;
                 int ret;
-
+                int json_ret;
+                int coor_fd = -1;
                 memset(buffer, 0, MAX_BUFFER_SIZE);
+                memset(seribuffer, 0, MAX_BUFFER_SIZE);
                 ret = recv( events[i].data.fd, buffer, MAX_BUFFER_SIZE, 0);
                 if (ret > 0)
                 {
                     printf("收到消息:%s, 共%d个字节\n", buffer, ret);
                     printf("buf: %s\n", buffer);
-                    ret = json_msgproc(buffer, ret, seribuffer, serilen, coorid);
-                    if(ERROR_SUCCESS == ret)
+                    json_ret = json_msgproc(buffer, ret, seribuffer, &serilen, &coorid);
+                    printf("ret: %d\n", json_ret);
+                    if(ERROR_SUCCESS == json_ret)
                     {
+                        printf("buf: %s\n", seribuffer);
                         /*根据coorid地址找到对应的fd分发*/
-                        send (client_sock, seribuffer, serilen, 0);
+                        coor_fd = coor_findfd(coorid);
+                        printf("coor_fd: %d\ncoorid:%d\n", coor_fd, coorid);
+                        if(coor_fd > -1)
+                        {
+                            send (coor_fd, seribuffer, serilen, 0);
+                        }
                     }
                 }
                 else
@@ -205,24 +218,34 @@ int main(int argn, char **argc)
                     exit(1);
                 }
             }
+            /*接收 zigbee客户端 报文*/
             else if (events[i].events & EPOLLIN)
             {
                 char buffer[MAX_BUFFER_SIZE];
                 char outbuffer[MAX_BUFFER_SIZE];
                 int ret;
+                int err;
+                ushort coor_id = 0;
 
                 memset(buffer, 0, MAX_BUFFER_SIZE);
                 ret = recv( events[i].data.fd, buffer, MAX_BUFFER_SIZE, 0);
                 if (ret > 0)
                 {
-                    (void)seri_to_json(buffer, ret, outbuffer);
+                    err = seri_msgproc(buffer, ret, outbuffer, &coor_id);
+
                     //send (events[i].data.fd, "It's for TCP client!\n", 22, 0);
                     printf("收到消息:%s, 共%d个字节\n", buffer, ret);
-                    printf("outbuf: %s\n", outbuffer);
+
                     /*
                     * 发送到zigee-mqtt服务器*
                     */
-                    send (client_sock, outbuffer, strlen(outbuffer), 0);
+                    if (ERROR_FAILED != err)
+                    {
+                        printf("outbuf: %s\nfd:%d\n,coor_id:%d\n", outbuffer, events[i].data.fd, coor_id);
+                        coor_add(coor_id, events[i].data.fd);
+
+                        send (client_sock, outbuffer, strlen(outbuffer), 0);
+                    }
                     outbuffer[0] = '\0';
 
                 }

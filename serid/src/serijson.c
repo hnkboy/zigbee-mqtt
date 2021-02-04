@@ -55,7 +55,9 @@ void seri_msgntoh(SERIAL_RCVMSG_S *pstmsg)
 /*
 * @brief
 */
-cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
+cJSON * seri2json(IN uchar *aucbuf, IN int msglen,
+                     INOUT int *premainlen,
+                      INOUT ushort *coor_id)
 {
 
     uint uiptrn = 0;
@@ -107,6 +109,7 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
         return NULL;
     }
 
+    *coor_id = pstmsg->addr3;
 
     ustmp  =  pstmsg->addr2 >> 8;   /* 转换字节序 */
     ustmp |= (pstmsg->addr2 << 8) & 0xff00;
@@ -173,8 +176,9 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
             }
         }
         /* 整理TLV的信息，以json形式写入 */
-        sprintf(print_strbuf,"%s", seri_tlv_tagstr[pstmsgtlvhead->type]);
-        cJSON_AddItemToObject(item, "tag", cJSON_CreateString(print_strbuf));
+        //sprintf(print_strbuf,"%s", seri_tlv_tagstr[pstmsgtlvhead->type]);
+        //cJSON_AddItemToObject(item, "tag", cJSON_CreateString(print_strbuf));
+        cJSON_AddItemToObject(item, "tag", cJSON_CreateNumber(pstmsgtlvhead->type));
         cJSON_AddItemToObject(item, "len", cJSON_CreateNumber(pstmsgtlvhead->len));
         print_strbuf[0] = '\0';
         strcat(print_strbuf, "0x");
@@ -195,16 +199,178 @@ cJSON * seri_msgproc(IN uchar *aucbuf, IN int msglen, INOUT int *premainlen)
 /*
 * @brief
 */
-int json_msgproc(IN uchar *jsonbuf, IN int msglen,
-                    INOUT uchar *seribuf, INOUT int *sendlen)
+int hextodec(char s[])
 {
-    int ret = ERROR_SUCCESS;
+    int i, m, temp=0, n;
+    m = strlen(s);//十六进制是按字符串传进来的，所以要获得字符串长度
+    for (i=0; i<m; i++)
+    {
+        if(s[i]>='A' && s[i]<='F')//十六进制还要判断字符是不是在A-F或者a-f之间
+        {
+            n = s[i] - 'A' + 10;
+        }
+        else if(s[i]>='a' && s[i]<='f')
+        {
+            n= s[i] - 'a' + 10;
+        }
+        else
+        {
+            n= s[i] - '0';
+        }
+        temp=temp*16+n;
+    }
+    return temp;
+}
+/*
+* @brief
+*/
+int json_msgproc(   IN uchar *jsonbuf,
+                    IN int msglen,
+                    INOUT uchar *outbuf,
+                    INOUT int *sendlen,
+                    INOUT ushort *coorid)
+{
+    int ret = ERROR_FAILED;
+    char *jsonstr = NULL;
+    cJSON *json = NULL;
+    cJSON *found = NULL;
+    cJSON *arrayItem = NULL;
+    cJSON *tlvobj = NULL;
+    cJSON *devobj = NULL;
+    ushort uslen_tmp;
+    uchar seribuf[ZIGBEE_MAX_DATALEN];
+    int serin = 0;
 
+    SERIAL_RCVMSG_S *pstmsg = NULL;
+
+    int parse_coorid = -1;
+    int parse_devid = -1;
+
+    jsonbuf[msglen] = '\0';
+    int array_cnt = 0;
+    int devtlvn = 0;
+
+    memset(seribuf, 0, ZIGBEE_MAX_DATALEN);
+
+    json = cJSON_Parse(jsonbuf); //获取整个大的句柄
+    if (NULL == json)
+    {
+        printf("cJSON_Parse() failed\n");
+        return ret;
+    }
+
+    jsonstr = cJSON_Print(json); //这个是可以输出的。为获取的整个json的值
+    printf("cJSON_Parse() %s\n", jsonstr);
+    arrayItem = cJSON_GetObjectItem(json, "dev"); //获取这个对象成员
+    if (NULL == arrayItem)
+    {
+        printf("not found \"dev\"\n");
+        return ret;
+    }
+    for (array_cnt = 0; array_cnt < 100; array_cnt++)
+    {
+        /* code */
+        devobj = cJSON_GetArrayItem(arrayItem, array_cnt);//因为这个对象是个数组获取，且只有一个元素所以写下标为0获取
+        if (NULL == devobj)
+        {
+            printf("cJSON_GetArrayItem(arrayItem, 0); failed\n");
+            break;
+        }
+
+        found = cJSON_GetObjectItem(devobj, "coorid");
+        if (NULL == found)
+        {
+            printf("not found \"coorid\"\n");
+            break;
+        }
+        parse_coorid = atoi(found->valuestring);
+        *coorid = parse_coorid;
+        printf("success get coorid: %s\n",found->valuestring);
+        printf("success get coorid: %d\n",parse_coorid);
+
+        found = cJSON_GetObjectItem(devobj, "devid");
+        if (NULL == found)
+        {
+            printf("not found \"coorid\"\n");
+            break;
+        }
+        parse_devid = atoi(found->valuestring);
+
+
+        /*准备组serid 报文*/
+
+
+        pstmsg = (SERIAL_RCVMSG_S *)(seribuf + serin);
+
+        pstmsg->sop = 0xFE;
+        pstmsg->addr1 = (ushort)parse_devid;
+        pstmsg->version = 0x01;
+
+        serin += sizeof(SERIAL_RCVMSG_S);  /*偏移*/
+
+        /*处理tlv部分*/
+        arrayItem = cJSON_GetObjectItem(devobj, "devtlv");
+        for (devtlvn = 0; devtlvn < 100; devtlvn++)
+        {
+            uchar tag, len;
+            char *valstr, tlv_seristr[10];
+            tlvobj = cJSON_GetArrayItem(arrayItem, devtlvn);
+            if(NULL == tlvobj)
+          break;
+
+            found = cJSON_GetObjectItem(tlvobj, "tag");
+            //seribuf[serin ++] = (uchar)((found->valueint >> 8) & (0xff));
+            seribuf[serin ++] = (uchar)((found->valueint) & (0xff));
+
+            found = cJSON_GetObjectItem(tlvobj, "len");
+            seribuf[serin ++] = (uchar)((found->valueint) & (0xff));
+
+            if (found->valueint > 0)
+            {
+                int len = found->valueint;
+                int i;
+                int data;
+                uchar *pstr;
+                uchar hex[3];
+                hex[2] = '\0';
+                found = cJSON_GetObjectItem(tlvobj, "value");
+                pstr = found->valuestring + 2;
+                for (i=0; i < len; i++)
+                {
+                    memcpy(hex, pstr, 2);
+
+                    data = hextodec(hex);
+                    seribuf[serin ++] = (uchar)data;
+                    pstr = pstr + 2;
+                }
+            }
+            printf("array_cnt:%d, evtlvn: %d\n", array_cnt, devtlvn);
+        }
+        pstmsg->len = serin - sizeof(SERIAL_RCVMSG_S);/*数据长度*/
+        uslen_tmp  =  pstmsg->len >> 8;   /*转换字节序*/
+        uslen_tmp |= (pstmsg->len << 8) & 0xff00;
+        pstmsg->len = uslen_tmp;
+
+
+    }
+    /*判断填充条件*/
+    if((0 < serin) && (serin < ZIGBEE_MAX_DATALEN))
+    {
+        memcpy(outbuf, seribuf, serin);
+        *sendlen = serin;
+        printf("send data:");
+        for(int i=0; i < serin; i++)
+        {
+            printf("%02x ", seribuf[i]);
+        }
+        printf("\n");
+        ret = ERROR_SUCCESS;
+    }
 
     return ret;
 }
 //int main(int argn, char **argc)
-int seri_to_json(char* in, int in_len, char* out)
+int seri_msgproc(char* in, int in_len, char* out, ushort *coor_id)
 {
 
     uchar *buf = (uchar *)in;
@@ -215,7 +381,8 @@ int seri_to_json(char* in, int in_len, char* out)
     cJSON * root =  cJSON_CreateObject();
     cJSON * array = cJSON_CreateArray();
     cJSON * next =  cJSON_CreateObject();
-
+    int ret = ERROR_SUCCESS;
+    ushort id,old_id  = 0;
     printf("seritojson: ");
     for(int i=0; i<in_len; i++)
     {
@@ -230,52 +397,89 @@ int seri_to_json(char* in, int in_len, char* out)
     remain_len = in_len = 21; */
     for ( ; 0 < remain_len; )
     {
-        ret_json = seri_msgproc(&buf[in_len - remain_len], remain_len, &remain_len);
+        ret_json = seri2json(&buf[in_len - remain_len], remain_len, &remain_len, &id);
         if(NULL != ret_json)
         {
             cJSON_AddItemToArray(array, ret_json);
         }
+
+        if (old_id != id)
+        {
+            syslog(LOG_WARNING, "Coor id is no same: %u %u\n", old_id, id);
+        }
+        old_id = id;
+
     }
+    *coor_id = old_id;
     cJSON_AddItemToObject(root, "dev", array);
 
     strcat(out, cJSON_Print(root));
     if (NULL != root){
         cJSON_Delete(root);
+        ret = ERROR_SUCCESS;
     }
-    return 0;
+    else
+    {
+        ret = ERROR_FAILED;
+    }
+    return ret;
 }
-
-
-int json_to_seri(char* in, int in_len, char* out)
+/*
+* @brief 原供python调用接口  已废弃
+*/
+int seri_to_json(char* in, int in_len, char* out, ushort *coor_id)
 {
+#if 0
+    uchar *buf = (uchar *)in;
+    char a = -2;
+    uchar b = 0xfe;
+    int remain_len = in_len;
+    cJSON * ret_json  = NULL;
     cJSON * root =  cJSON_CreateObject();
-    cJSON * item =  cJSON_CreateObject();
+    cJSON * array = cJSON_CreateArray();
     cJSON * next =  cJSON_CreateObject();
-
-    cJSON_AddItemToObject(root, "rc", cJSON_CreateNumber(0));//根节点下添加
-    cJSON_AddItemToObject(root, "operation", cJSON_CreateString("CALL"));
-    cJSON_AddItemToObject(root, "service", cJSON_CreateString("telephone"));
-    cJSON_AddItemToObject(root, "text", cJSON_CreateString("打电话给张三"));
-    cJSON_AddItemToObject(root, "semantic", item);//root节点下添加semantic节点
-    cJSON_AddItemToObject(item, "slots", next);//semantic节点下添加item节点
-    cJSON_AddItemToObject(next, "name", cJSON_CreateString("张三"));//添加name节点
-
+    int ret = ERROR_SUCCESS;
+    ushort id,old_id  = 0;
     printf("seritojson: ");
     for(int i=0; i<in_len; i++)
     {
-         printf("%c", in[i]);
+         printf("%2x ", buf[i]);
     }
     printf("\n");
 
+/*     uchar buf_temp[21] = {
+        0xfe,0x01,0x00,0x05,0xde,0xaf,0xee,0xee,0xdd,0xdd,0x23,0x00,0x00,0x00,0x12,0x34,0x0c,0x03,0x01,0x02,0x44
+    };
+    buf = buf_temp;
+    remain_len = in_len = 21; */
+    for ( ; 0 < remain_len; )
+    {
+        ret_json = seri_msgproc(&buf[in_len - remain_len], remain_len, &remain_len, &id);
+        if(NULL != ret_json)
+        {
+            cJSON_AddItemToArray(array, ret_json);
+        }
 
+        if (old_id != id)
+        {
+            syslog(LOG_WARNING, "Coor id is no same: %u %u\n", old_id, id);
+        }
+        old_id = id;
 
+    }
+    *coor_id = old_id;
+    cJSON_AddItemToObject(root, "dev", array);
 
     strcat(out, cJSON_Print(root));
     if (NULL != root){
         cJSON_Delete(root);
+        ret = ERROR_SUCCESS;
     }
+    else
+    {
+        ret = ERROR_FAILED;
+    }
+    return ret;
+#endif
     return 0;
 }
-
-
-

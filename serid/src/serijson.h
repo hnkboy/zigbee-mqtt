@@ -131,9 +131,14 @@ typedef struct sttyperesptemphumi
     uchar humi;
 }SERIAL_TLV_MO_GET_TEMPHUMI;
 
-int seri_to_json(char* in, int in_len, char* out);
+int seri_to_json(char* in, int in_len, char* out, ushort *coor_id); /*废弃*/
+
+
+int seri_msgproc(char* in, int in_len, char* out, ushort *coor_id);
 int json_msgproc(IN uchar *jsonbuf, IN int msglen,
-                    INOUT uchar *seribuf, INOUT int *sendlen);
+                    INOUT uchar *seribuf,
+                    INOUT int *sendlen,
+                    INOUT ushort *coorid);
 
 #endif
 
