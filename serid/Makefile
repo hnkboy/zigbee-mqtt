@@ -5,7 +5,7 @@ CC = $(CROSS_COMPILE)gcc
 TARGET = serid
 SRCS = $(wildcard ./src/*.c)
 export SRCS
-LIBS=-L ./ -lcjson
+LIBS=-L ./ -lcjson -lrt
 #编译出lib
 #$(CC) $(SRCS) $(LIBS) -fPIC -shared -o $(TARGETLIB)
 all: $(TARGET)

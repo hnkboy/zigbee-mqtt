@@ -11,6 +11,7 @@
 #include <time.h>
 #include <sys/epoll.h>
 
+#include <mqueue.h>
 
 #include "infra.h"
 #include "serijson.h"
@@ -27,10 +28,19 @@ int main(int argn, char **argc)
 	const int on = 1;
 
 	int tcp_sock, udp_sock, from_len, ready_tcp, ready_udp, ready, contact, len, epfd, fd, i;
+#if MQTT_EXTERNAL
     int client_sock;
+    int client_con_ret;
+#else
+    int mq_fd, ret;
+    char *mq_name="/zigbee-mqtt";
+#endif
+
+
+
     uint server_addr,client_addr;
 	int timeout_msec = 500;
-    int client_con_ret;
+
 	char buf[30];
 	struct sockaddr_in s_addr, clnt_addr, new_s_addr;
 	struct epoll_event ev, events[NUM_EVENTS];
@@ -38,7 +48,7 @@ int main(int argn, char **argc)
 
     /*1. 打开syslog*/
     openlog("SERID", LOG_CONS | LOG_PID, LOG_LOCAL2);
-    
+
     /*2. 初始化 coor 设备资源*/
     coorfd_init();
     if (argn <= 2)
@@ -101,6 +111,7 @@ int main(int argn, char **argc)
 		perror ("Epoll_ctl UDP error!\n");
 		exit (1);
 	}
+    #if MQTT_EXTERNAL
 /*
  * Fabricate socket and set socket options.
  */
@@ -116,23 +127,46 @@ int main(int argn, char **argc)
 	printf ("Connecting to server...\n");
     /*返回值只是判断是否成功，client角色只需要一个fd就可以搞定*/
 	client_con_ret = connect (client_sock, (struct sockaddr *)&clnt_addr, sizeof(clnt_addr));
-    if(client_con_ret == (-1))
+
+    if(client_con_ret > (-1))
     {
         perror ("Connect mqtt error!\n");
+        ev.events = EPOLLIN | EPOLLET;
+        ev.data.fd = client_sock;
+        ready_tcp = epoll_ctl (epfd, EPOLL_CTL_ADD, client_sock, &ev);
+        if (ready_tcp < 0)
+        {
+            perror ("Epoll_ctl TCP error!\n");
+            exit (1);
+        }
+        //send (client_sock, "Hi! I'm TCP client!\n", 21, 0);
+        printf ("Connecting success...\n");
+        syslog(LOG_INFO, "Connecting success... \n");
+    }
+    #else
+    /*需要内部处理json格式*/
+    /*初始化 mqtt*/
+    /*设置mq队列fd*/
+    mq_fd = mq_open((char *)mq_name, O_RDWR|O_CREAT, 0600, NULL);
+    if(mq_fd > -1)
+    {
+        ev.events = EPOLLIN;
+        ev.data.fd = mq_fd;
+        ret = epoll_ctl (epfd, EPOLL_CTL_ADD, mq_fd, &ev);
+        if (ret < 0)
+        {
+            perror ("mqtt epoll error!\n");
+            exit (1);
+        }
+    }
+    else
+    {
+        perror ("mqtt error!\n");
         exit (1);
     }
- 	ev.events = EPOLLIN | EPOLLET;
-	ev.data.fd = client_sock;
-	ready_tcp = epoll_ctl (epfd, EPOLL_CTL_ADD, client_sock, &ev);
+    #endif
 
-	if (ready_tcp < 0)
-	{
-		perror ("Epoll_ctl TCP error!\n");
-		exit (1);
-	}
-    //send (client_sock, "Hi! I'm TCP client!\n", 21, 0);
-    printf ("Connecting success...\n");
-    syslog(LOG_INFO, "Connecting success... \n");
+
 /*
  * Client service loop
  */
@@ -179,6 +213,7 @@ int main(int argn, char **argc)
 				sendto(udp_sock, "It's for UDP client!\n", 22,
 				0, (struct sockaddr *)&s_addr, sizeof(s_addr));
 			}
+            #if MQTT_EXTERNAL
             /*作为客户端连接mqtt*/
             else if (events[i].data.fd == client_sock)
             {
@@ -217,7 +252,29 @@ int main(int argn, char **argc)
                     close(events[i].data.fd);
                     exit(1);
                 }
+
             }
+            #else
+            else if (events[i].data.fd == mq_fd)
+            {
+                char buffer[MAX_BUFFER_SIZE];
+                char seribuffer[MAX_BUFFER_SIZE];
+                int mq_val;
+                int mq_ret;
+                mq_ret = mq_receive(mq_fd, buffer, MAX_BUFFER_SIZE, &mq_val);
+                if (-1 == mq_ret)
+                {
+                    syslog(LOG_WARNING, "mq_receive err()\n");
+                }
+                else
+                {
+                    buffer[mq_ret] = '\0';
+                    printf("mqtt buffer: %s", buffer);
+                }
+
+
+            }
+            #endif
             /*接收 zigbee客户端 报文*/
             else if (events[i].events & EPOLLIN)
             {
@@ -243,8 +300,11 @@ int main(int argn, char **argc)
                     {
                         printf("outbuf: %s\nfd:%d\n,coor_id:%d\n", outbuffer, events[i].data.fd, coor_id);
                         coor_add(coor_id, events[i].data.fd);
-
+                        #if MQTT_EXTERNAL
                         send (client_sock, outbuffer, strlen(outbuffer), 0);
+                        #else
+                        (void)mq_send(mq_fd, outbuffer, strlen(outbuffer), 2);
+                        #endif
                     }
                     outbuffer[0] = '\0';
 
@@ -261,7 +321,11 @@ int main(int argn, char **argc)
 	}
 	shutdown (tcp_sock, SHUT_RDWR);
 	shutdown (udp_sock, SHUT_RDWR);
+    #if MQTT_EXTERNAL
     shutdown (client_sock, SHUT_RDWR);
+    #else
+    mq_close(mq_fd);
+    #endif
     /*SHUT_RD：断开输入流。套接字无法接收数据（即使输入缓冲区收到数据也被抹去），无法调用输入相关函数。
       SHUT_WR：断开输出流。套接字无法发送数据，但如果输出缓冲区中还有未传输的数据，则将传递到目标主机。
       SHUT_RDWR：同时断开 I/O 流。相当于分两次调用 shutdown()，其中一次以 SHUT_RD 为参数，另一次以 SHUT_WR 为参数。*/
